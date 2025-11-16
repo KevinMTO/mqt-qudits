@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import typing
-from typing import Optional
 
 from ..core.custom_python_utils import append_to_front
 from ..quantum_circuit.components.extensions.gate_types import GateTypes
-from . import CompilerPass
 from .multidit.transpile.phy_multi_control_transp import PhyMultiSimplePass
 from .naive_local_resynth import NaiveLocResynthOptPass
 from .onedit import LogLocQRPass, PhyLocAdaPass, PhyLocQRPass, ZPropagationOptPass, ZRemovalOptPass
@@ -17,7 +15,6 @@ if typing.TYPE_CHECKING:
     from ..quantum_circuit import QuantumCircuit
     from ..quantum_circuit.gate import Gate
     from ..simulation.backends.backendv2 import Backend
-    from . import CompilerPass
 
 
 class QuditCompiler:
@@ -143,6 +140,10 @@ class QuditCompiler:
 
         new_instructions: list[Gate] = []
         for gate in reversed(circuit.instructions):
+            int_mappings = []
+            for i, graph in enumerate(backend.energy_level_graphs):
+                if i < circuit.num_qudits:
+                    int_mappings.append([lev for lev in graph.log_phy_map if lev < circuit.dimensions[i]])
             ins: list[Gate] = []
             if gate.gate_type is GateTypes.SINGLE:
                 ins = phyloc.transpile_gate(gate)

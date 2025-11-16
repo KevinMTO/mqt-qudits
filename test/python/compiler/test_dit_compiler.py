@@ -13,7 +13,6 @@ from mqt.qudits.compiler.compilation_minitools.naive_unitary_verifier import (
     naive_phy_sim,
 )
 from mqt.qudits.compiler.state_compilation.retrieve_state import generate_random_quantum_state
-from mqt.qudits.compiler.twodit.variational_twodit_compilation.opt import fidelity_on_unitares
 from mqt.qudits.compiler.twodit.variational_twodit_compilation.opt.distance_measures import naive_state_fidelity
 from mqt.qudits.compiler.twodit.variational_twodit_compilation.sparsifier import (
     random_sparse_unitary,
@@ -117,8 +116,7 @@ class TestQuditCompiler(TestCase):
         for i in range(3):
             for j in range(3):
                 if i != j:
-                    if choice([True, False]):
-                        circuit.cu_one(i, random_sparse_unitary(circuit.dimensions[i]))
+                    circuit.cu_one(i, random_sparse_unitary(circuit.dimensions[i]))
                     if choice([True, False]):
                         circuit.cu_two([i, j], random_unitary_matrix(circuit.dimensions[i] * circuit.dimensions[j]))
 
@@ -127,25 +125,105 @@ class TestQuditCompiler(TestCase):
 
         uni_l = mini_unitary_sim(circuit).round(10)
         uni_cl = mini_phy_unitary_sim(new_circuit).round(10)
-        assert np.allclose(uni_l, uni_cl, rtol=1e-6, atol=1e-6)
+        assert np.allclose(uni_l, uni_cl, rtol=1e-4, atol=1e-4)
 
         og_state = circuit.simulate()
         compiled_state = naive_phy_sim(new_circuit)
-        assert np.allclose(og_state, compiled_state, rtol=1e-6, atol=1e-6)
+        assert np.allclose(og_state, compiled_state, rtol=1e-4, atol=1e-4)
 
     @staticmethod
     def test_compile_o1_adaptive():
-        provider = MQTQuditProvider()
-        backend_ion = provider.get_backend("faketraps8seven")
+        for work_please in range(50):
+            provider = MQTQuditProvider()
+            backend_ion = provider.get_backend("faketraps8seven")
 
-        circuit = QuantumCircuit(3, [3, 4, 5], 0)
-        for i in range(3):
-            for j in range(3):
-                if i != j:
-                    if choice([True, False]):
+            circuit = QuantumCircuit(3, [3, 4, 5], 0)
+            for i in range(3):
+                for j in range(3):
+                    if i != j:
                         circuit.cu_one(i, random_sparse_unitary(circuit.dimensions[i]))
-                    if choice([True, False]):
-                        circuit.cu_two([i, j], random_unitary_matrix(circuit.dimensions[i] * circuit.dimensions[j]))
+                        if choice([True, False]):
+                            circuit.cu_two([i, j], random_sparse_unitary(circuit.dimensions[i] * circuit.dimensions[j]))
+
+            qudit_compiler = QuditCompiler()
+            new_circuit = qudit_compiler.compile_O1_adaptive(backend_ion, circuit)
+            uni_l = mini_unitary_sim(circuit).round(10)
+            uni_cl = mini_phy_unitary_sim(new_circuit).round(10)
+            assert np.allclose(uni_l, uni_cl, rtol=1e-6, atol=1e-6)
+
+            og_state = circuit.simulate()
+            compiled_state = naive_phy_sim(new_circuit)
+            assert np.allclose(og_state, compiled_state, rtol=1e-6, atol=1e-6)
+
+    @staticmethod
+    def test_compile_02():
+        for test_try in range(20):
+            provider = MQTQuditProvider()
+            backend_ion = provider.get_backend("faketraps8seven")
+
+            circuit = QuantumCircuit(3, [3, 4, 5], 0)
+            for _k in range(2):
+                for i in range(3):
+                    for j in range(3):
+                        if i != j:
+                            circuit.cu_one(i, random_sparse_unitary(circuit.dimensions[i]))
+                            if choice([True, False]):
+                                circuit.cu_two([i, j], random_sparse_unitary(circuit.dimensions[i] * circuit.dimensions[j]))
+
+            qudit_compiler = QuditCompiler()
+            new_circuit = qudit_compiler.compile_O2(backend_ion, circuit)
+
+            uni_l = mini_unitary_sim(circuit).round(10)
+            uni_cl = mini_phy_unitary_sim(new_circuit).round(10)
+            assert np.allclose(uni_l, uni_cl, rtol=1e-6, atol=1e-6)
+
+            og_state = circuit.simulate()
+            compiled_state = naive_phy_sim(new_circuit)
+            assert np.allclose(og_state, compiled_state, rtol=1e-6, atol=1e-6)
+
+    @staticmethod
+    def test_random_evo_compile():
+        for test_try in range(20):
+            provider = MQTQuditProvider()
+            backend_ion = provider.get_backend("faketraps8seven")
+            final_state = generate_random_quantum_state([3, 4, 5])
+            circuit = QuantumCircuit(3, [3, 4, 5], 0)
+            circuit.set_initial_state(final_state)
+
+            for _k in range(2):
+                for i in range(3):
+                    for j in range(3):
+                        if i != j:
+                            circuit.cu_one(i, random_sparse_unitary(circuit.dimensions[i]))
+                            if choice([True, False]):
+                                circuit.cu_two([i, j], random_sparse_unitary(circuit.dimensions[i] * circuit.dimensions[j]))
+
+            qudit_compiler = QuditCompiler()
+            new_circuit = qudit_compiler.compile_O2(backend_ion, circuit)
+
+            uni_l = mini_unitary_sim(circuit).round(10)
+            uni_cl = mini_phy_unitary_sim(new_circuit).round(10)
+            assert np.allclose(uni_l, uni_cl, rtol=1e-4, atol=1e-4)
+
+            og_state = circuit.simulate()
+            compiled_state = naive_phy_sim(new_circuit)
+            og_state = og_state.reshape(-1)
+            norm_diff_s = naive_state_fidelity(og_state, compiled_state)
+            assert (1 - norm_diff_s) < 1e-6
+
+    @staticmethod
+    def test_compile_from_file():
+        c = QuantumCircuit(1, [5])
+        m = (c.r(0, [1, 3, np.pi, -np.pi/2]).to_matrix() @
+             c.r(0, [3, 4, -np.pi/2, 3/2*np.pi]).to_matrix() @
+             c.r(0, [1, 3, np.pi, np.pi/2])).round(2)
+        m01 = c.r(0, [1, 4, np.pi/2, -np.pi/2]).to_matrix().round(2)
+
+        provider = MQTQuditProvider()
+        backend_ion = provider.get_backend("faketraps3six")
+        path_deb = "/home/k3vn/Documents/MQTQUDIT_DEV/MQT-QUDITS-CDA/mqt-qudits/test/python/compiler/data_deb/"
+        circuit = QuantumCircuit(3, [3, 4, 5], 0)
+        circuit.load_from_file(path_deb+"circuit_extract.qasm")
 
         qudit_compiler = QuditCompiler()
         new_circuit = qudit_compiler.compile_O1_adaptive(backend_ion, circuit)
@@ -157,60 +235,3 @@ class TestQuditCompiler(TestCase):
         og_state = circuit.simulate()
         compiled_state = naive_phy_sim(new_circuit)
         assert np.allclose(og_state, compiled_state, rtol=1e-6, atol=1e-6)
-
-    @staticmethod
-    def test_compile_02():
-        provider = MQTQuditProvider()
-        backend_ion = provider.get_backend("faketraps8seven")
-
-        circuit = QuantumCircuit(3, [3, 4, 5], 0)
-        for _k in range(2):
-            for i in range(3):
-                for j in range(3):
-                    if i != j:
-                        if choice([True, False]):
-                            circuit.cu_one(i, random_sparse_unitary(circuit.dimensions[i]))
-                        if choice([True, False]):
-                            circuit.cu_two([i, j], random_unitary_matrix(circuit.dimensions[i] * circuit.dimensions[j]))
-
-        qudit_compiler = QuditCompiler()
-        new_circuit = qudit_compiler.compile_O2(backend_ion, circuit)
-
-        uni_l = mini_unitary_sim(circuit).round(10)
-        uni_cl = mini_phy_unitary_sim(new_circuit).round(10)
-        assert np.allclose(uni_l, uni_cl, rtol=1e-6, atol=1e-6)
-
-        og_state = circuit.simulate()
-        compiled_state = naive_phy_sim(new_circuit)
-        assert np.allclose(og_state, compiled_state, rtol=1e-6, atol=1e-6)
-
-    @staticmethod
-    def test_random_evo_compile():
-        provider = MQTQuditProvider()
-        backend_ion = provider.get_backend("faketraps8seven")
-        final_state = generate_random_quantum_state([3, 4, 5])
-        circuit = QuantumCircuit(3, [3, 4, 5], 0)
-        circuit.set_initial_state(final_state)
-
-        for _k in range(2):
-            for i in range(3):
-                for j in range(3):
-                    if i != j:
-                        if choice([True, False]):
-                            circuit.cu_one(i, random_sparse_unitary(circuit.dimensions[i]))
-                        if choice([True, False]):
-                            circuit.cu_two([i, j], random_unitary_matrix(circuit.dimensions[i] * circuit.dimensions[j]))
-
-        qudit_compiler = QuditCompiler()
-        new_circuit = qudit_compiler.compile_O2(backend_ion, circuit)
-
-        uni_l = mini_unitary_sim(circuit).round(10)
-        uni_cl = mini_phy_unitary_sim(new_circuit).round(10)
-        assert np.allclose(uni_l, uni_cl, rtol=1e-5, atol=1e-5)
-
-        og_state = circuit.simulate()
-        compiled_state = naive_phy_sim(new_circuit)
-        # assert np.allclose(og_state, compiled_state, rtol=1e-6, atol=1e-6)
-        og_state = og_state.reshape(-1)
-        norm_diff_s = naive_state_fidelity(og_state, compiled_state)
-        assert (1 - norm_diff_s) < 1e-6

@@ -7,6 +7,7 @@ import numpy as np
 
 from mqt.qudits.compiler import CompilerPass
 from mqt.qudits.compiler.compilation_minitools.local_compilation_minitools import check_lev
+from mqt.qudits.compiler.onedit.local_operation_swap.routing_routine import ghost_routing
 from mqt.qudits.core.custom_python_utils import append_to_front
 from mqt.qudits.quantum_circuit.components.extensions.controls import ControlData
 from mqt.qudits.quantum_circuit.components.extensions.gate_types import GateTypes
@@ -27,36 +28,7 @@ class PhyMultiSimplePass(CompilerPass):
         self.circuit = QuantumCircuit()
 
     def __routing(self, gate: R, graph: LevelGraph) -> tuple[list[R], R, list[R]]:
-        from mqt.qudits.compiler.onedit.local_operation_swap import cost_calculator, gate_chain_condition
-        from mqt.qudits.quantum_circuit.gates import R
-
-        phi = gate.phi
-        _, pi_pulses_routing, temp_placement, _, _ = cost_calculator(gate, graph, 0)
-
-        if temp_placement.nodes[gate.lev_a]["lpmap"] > temp_placement.nodes[gate.lev_b]["lpmap"]:
-            phi *= -1
-
-        physical_rotation = R(
-            self.circuit,
-            "R",
-            cast("int", gate.target_qudits),
-            [temp_placement.nodes[gate.lev_a]["lpmap"], temp_placement.nodes[gate.lev_b]["lpmap"], gate.theta, phi],
-            gate.dimensions,
-        )
-
-        physical_rotation = gate_chain_condition(pi_pulses_routing, physical_rotation)
-        pi_backs = [
-            R(
-                self.circuit,
-                "R",
-                cast("int", gate.target_qudits),
-                [pi_g.lev_a, pi_g.lev_b, pi_g.theta, -pi_g.phi],
-                gate.dimensions,
-            )
-            for pi_g in reversed(pi_pulses_routing)
-        ]
-
-        return pi_pulses_routing, physical_rotation, pi_backs
+        return ghost_routing(gate, graph)
 
     def transpile_gate(self, gate: Gate) -> list[Gate]:
         from mqt.qudits.quantum_circuit.gates import R, Rz

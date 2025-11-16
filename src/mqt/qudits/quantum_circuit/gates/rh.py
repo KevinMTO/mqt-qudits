@@ -102,3 +102,7 @@ class Rh(Gate):
         if self.dagger:
             return "inv @ " + string_description
         return string_description
+
+    @property
+    def cost(self) -> float:
+        return 0.0

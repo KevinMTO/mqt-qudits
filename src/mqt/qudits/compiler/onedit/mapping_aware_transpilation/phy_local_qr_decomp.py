@@ -105,7 +105,6 @@ class PhyQrDecomp:
                     )  # R(theta, phi, r - 1, r, dimension)
 
                     u_ = rotation_involved.to_matrix(identities=0) @ u_  # matmul(rotation_involved.matrix, U_)
-
                     non_zeros = np.count_nonzero(abs(u_) > 1.0e-4)
 
                     estimated_cost, pi_pulses_routing, temp_placement, cost_of_pi_pulses, gate_cost = cost_calculator(

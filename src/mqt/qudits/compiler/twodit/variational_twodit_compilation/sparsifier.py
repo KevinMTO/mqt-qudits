@@ -25,7 +25,7 @@ def random_unitary_matrix(n: int) -> NDArray[np.complex128, np.complex128]:
     return unitary_group.rvs(n)
 
 
-def random_sparse_unitary(n: int, density: float = 0.4) -> NDArray:
+def random_sparse_unitary(n: int, density: float = 0.2) -> NDArray:
     """Generate a random sparse-like complex unitary matrix as a numpy array.
 
     Parameters:

@@ -22,11 +22,55 @@ class PhyEntQRCEXPass(CompilerPass):
         self.circuit = QuantumCircuit()
 
     def __transpile_local_ops(self, gate: Gate) -> list[Gate]:
-        from mqt.qudits.compiler.onedit.mapping_aware_transpilation import PhyQrDecomp
-
         energy_graph_i = self.backend.energy_level_graphs[cast("int", gate.target_qudits)]
-        qr = PhyQrDecomp(gate, energy_graph_i, not_stand_alone=False)
+        """pi_pulses_routing = []
+        pi_backs = []
+        from mqt.qudits.quantum_circuit.gates import R, Rz, Rh, VirtRz
+        if isinstance(gate, (R, Rz, Rh)):
+            pi_pulses_routing, physical_rotation, pi_backs = ghost_routing(gate, energy_graph_i)
+            if isinstance(gate, R):
+                new_physical = R(gate.parent_circuit,
+                                 "new_physical_R",
+                                 gate.target_qudits,
+                                 [physical_rotation.lev_a, physical_rotation.lev_b, physical_rotation.theta,
+                                  physical_rotation.phi],
+                                 gate.dimensions)
+                if physical_rotation.theta * physical_rotation.phi * gate.theta * gate.phi < 0:
+                    new_physical.dag()
+            elif isinstance(gate, Rz):
+                new_physical = Rz(gate.parent_circuit, "new_physical_Rz", gate.target_qudits,
+                                  [physical_rotation.lev_a, physical_rotation.lev_b, gate.phi],
+                                  gate.dimensions)
+                if physical_rotation.theta * physical_rotation.phi * gate.phi < 0:
+                    new_physical.dag()
+            elif isinstance(gate, Rh):
+                new_physical = Rh(gate.parent_circuit, "new_physical_Rh", gate.target_qudits,
+                                  [physical_rotation.lev_a, physical_rotation.lev_b],
+                                  gate.dimensions)
+                if (physical_rotation.theta * physical_rotation.phi) < 0:
+                    new_physical.dag()
+
+        elif isinstance(gate, VirtRz):
+            new_physical = VirtRz(gate.parent_circuit,
+                                  "phyVrz",
+                                  gate.target_qudits,
+                                  [energy_graph_i.log_phy_map[gate.lev_a], gate.phi],
+                                  gate.dimensions)
+        decomp = [*pi_pulses_routing, new_physical, *pi_backs]"""
+
+        from mqt.qudits.compiler.onedit.mapping_aware_transpilation import PhyQrDecomp
+        qr = PhyQrDecomp(gate, energy_graph_i)
         decomp, _algorithmic_cost, _total_cost = qr.execute()
+
+
+        ################################
+        target = gate.to_matrix(1).copy()
+        gdgdg0 = target.round(2)
+        for rotation in decomp:
+            target = rotation.to_matrix() @ target
+            gdgdg0 = target.round(2)
+        ################################
+
         return decomp
 
     @staticmethod
@@ -36,6 +80,14 @@ class PhyEntQRCEXPass(CompilerPass):
 
         phy_two_simple = PhyEntSimplePass(backend)
         transpiled = phy_two_simple.transpile_gate(gate)
+
+        ################################
+        target = gate.to_matrix(2).copy()
+        for rotation in transpiled:
+            target = rotation.to_matrix(identities=2) @ target
+        dd = target.round(2)
+        ################################
+
         return (len(transpiled) > 0), transpiled
 
     def transpile_gate(self, orig_gate: Gate) -> list[Gate]:

@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import gc
 import itertools
-from random import shuffle
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
@@ -53,6 +52,7 @@ class PhyLocAdaPass(CompilerPass):
         (matrices_decomposed, _best_cost, new_energy_level_graph) = adaptive.execute()
 
         self.backend.energy_level_graphs[cast("int", gate.target_qudits)] = new_energy_level_graph
+
         return [op.dag() for op in reversed(matrices_decomposed)]
 
     def transpile(self, circuit: QuantumCircuit) -> QuantumCircuit:
@@ -219,11 +219,11 @@ class PhyAdaptiveDecomposition:
                 phi = -(np.pi / 2 + np.angle(u_[r, c]) - np.angle(u_[r2, c]))
 
                 rotation_involved = gates.R(
-                    self.circuit, "R", self.qudit_index, [r, r2, theta, phi], self.dimension
+                        self.circuit, "R", self.qudit_index, [r, r2, theta, phi], self.dimension
                 )  # R(theta, phi, r, r2, dimension)
 
                 u_temp = rotation_involved.to_matrix(identities=0) @ u_  # matmul(rotation_involved.matrix, U_)
-                u_temp.round(4)
+
                 non_zeros = np.count_nonzero(abs(u_temp) > 1.0e-4)
 
                 (
@@ -246,22 +246,22 @@ class PhyAdaptiveDecomposition:
                     if new_placement.nodes[r]["lpmap"] > new_placement.nodes[r2]["lpmap"]:
                         phi *= -1
                     physical_rotation = gates.R(
-                        self.circuit,
-                        "R",
-                        self.qudit_index,
-                        [new_placement.nodes[r]["lpmap"], new_placement.nodes[r2]["lpmap"], theta, phi],
-                        self.dimension,
+                            self.circuit,
+                            "R",
+                            self.qudit_index,
+                            [new_placement.nodes[r]["lpmap"], new_placement.nodes[r2]["lpmap"], theta, phi],
+                            self.dimension,
                     )
                     physical_rotation = gate_chain_condition(pi_pulses_routing, physical_rotation)
                     physical_rotation = graph_rule_ongate(physical_rotation, new_placement)
 
                     p_backs = [
                         gates.R(
-                            self.circuit,
-                            "R",
-                            self.qudit_index,
-                            [ppulse.lev_a, ppulse.lev_b, ppulse.theta, -ppulse.phi],
-                            self.dimension,
+                                self.circuit,
+                                "R",
+                                self.qudit_index,
+                                [ppulse.lev_a, ppulse.lev_b, ppulse.theta, -ppulse.phi],
+                                self.dimension,
                         )
                         for ppulse in pi_pulses_routing
                     ]
@@ -270,40 +270,16 @@ class PhyAdaptiveDecomposition:
                         graph_rule_update(p_back, new_placement)
 
                     current_root.add(
-                        new_key,
-                        physical_rotation,
-                        u_temp,
-                        new_placement,
-                        next_step_cost,
-                        decomp_next_step_cost,
-                        current_root.max_cost,
-                        pi_pulses_routing,
+                            new_key,
+                            physical_rotation,
+                            u_temp,
+                            new_placement,
+                            next_step_cost,
+                            decomp_next_step_cost,
+                            current_root.max_cost,
+                            pi_pulses_routing,
                     )
 
-        def calculate_sparsity(matrix: NDArray) -> float:
-            total_elements = matrix.size
-            non_zero_elements = np.count_nonzero(np.abs(matrix) > 1e-8)  # np.count_nonzero(matrix)
-            return cast("float", non_zero_elements / total_elements)
-
-        def change_kids(lst: list[TreeNode]) -> list[TreeNode]:
-            # Check if the list is non-empty
-            if not lst:
-                return lst
-            vals = [calculate_sparsity(obj.u_of_level) for obj in lst]
-            # Calculate the range of values in the list
-            min_val, _max_val = min(vals), max(vals)
-            min_from_one = 1 - min_val
-            dim = lst[0].u_of_level.shape[0]
-            threshold = (dim - 3) ** 2 / dim**2
-            # If the spread is below the threshold, shuffle the list
-            if min_from_one < threshold and len(lst) > dim**2 * 0.6:
-                shuffle(lst)
-            else:
-                lst = sorted(lst, key=lambda obj: calculate_sparsity(obj.u_of_level))
-
-            return lst
-
         if current_root.children is not None:
-            new_kids = change_kids(current_root.children)
-            for child in new_kids:
+            for child in current_root.children:
                 self.dfs(child, level + 1)
